@@ -52,8 +52,8 @@ def send_mail(send_from, send_to, subject, text, files=None,
 
 st.header('Musikbingo')
 
-playlist_link = st.text_input('Playlist Link:')
-email_address = st.text_input('Email:')
+playlist_link = st.text_input('Spotify Playlist Link:')
+email_address = st.text_input('Modtager Email:')
 num_plader = st.slider("antal bingoplader")
 
 
