@@ -66,7 +66,8 @@ def get_tile_values_from_playlist(playlist_link,sp):
     try:
         track_uris = [x["track"]["uri"] for x in sp.playlist_tracks(playlist_URI)["items"]]
     except:
-        st.info('Please supply a valid spotify playlist link')
+        if playlist_link:
+            st.info('Indtast et gyldigt spotify playliste-link')
         return [],[]
 
     value_strings = [track["track"]["name"]+'\n'+track["track"]["artists"][0]["name"]
