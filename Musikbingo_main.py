@@ -207,3 +207,8 @@ def main():
 
     elif not num_plader:
         st.info('PVælg et antal bingoplader (større end nul, self)')
+
+
+
+if __name__ == '__main__':
+    main()
