@@ -17,6 +17,7 @@ from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
 import smtplib, ssl
 import shutil
+import credentials as c
 
 
 def send_mail(send_from, send_to, subject, text, files=None,
@@ -46,38 +47,27 @@ def send_mail(send_from, send_to, subject, text, files=None,
         server.ehlo()  # Can be omitted
         server.starttls(context=context)
         server.ehlo()  # Can be omitted
-        server.login(send_from, 'secret')
+        server.login(send_from,c.mail_pswrd)
         server.sendmail(send_from, send_to, msg.as_string())
         server.close()
 
-st.header('Musikbingo')
 
-playlist_link = st.text_input('Spotify Playlist Link:')
-email_address = st.text_input('Modtager Email:')
-num_plader = st.slider("antal bingoplader")
+def initialize_spotify():
+    cid = c.cid
+    secret  = c.secret
+    client_credentials_manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
+    sp = spotipy.Spotify(client_credentials_manager = client_credentials_manager)
+
+    return sp
 
 
-
-
-cid = 'sdf'
-secret  = 'sdf'
-client_credentials_manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
-sp = spotipy.Spotify(client_credentials_manager = client_credentials_manager)
-
-#playlist_uri = '37i9dQZF1DX0kbJZpiYdZl'
-
-#uri_link = 'https://open.spotify.com/embed/playlist/37i9dQZF1DX0kbJZpiYdZl' + playlist_uri
-
-if 'lav_bingo' not in st.session_state:
-    st.session_state['lav_bingo'] = False
-
-if st.button('Lav Bingoplader!'):
-    st.session_state['lav_bingo'] = True
-
-if st.session_state['lav_bingo']:
+def get_tile_values_from_playlist(playlist_link,sp):
     playlist_URI = playlist_link.split("/")[-1].split("?")[0]
-    track_uris = [x["track"]["uri"] for x in sp.playlist_tracks(playlist_URI)["items"]]
-
+    try:
+        track_uris = [x["track"]["uri"] for x in sp.playlist_tracks(playlist_URI)["items"]]
+    except:
+        st.info('Please supply a valid spotify playlist link')
+        return [],[]
 
     value_strings = [track["track"]["name"]+'\n'+track["track"]["artists"][0]["name"]
                     for track in sp.playlist_tracks(playlist_URI)["items"]]
@@ -85,7 +75,9 @@ if st.session_state['lav_bingo']:
 
     ixes = [i for i in range(len(value_strings))]
 
-    max_songs_pr_sheet = 10
+    return value_strings,ixes
+
+def create_bingo_dfs(value_strings,num_plader,max_songs_pr_sheet = 10):
     bingoplade_dfs = []
 
     for plade in range(num_plader):
@@ -114,10 +106,13 @@ if st.session_state['lav_bingo']:
 
         bingoplade_dfs.append(pd.DataFrame.from_dict(cur_plade))
 
+    return bingoplade_dfs
+
+
+def save_dfs_to_docx(bingoplade_dfs):
     dir_name = 'bingoplader_'+str(random.random())[2:]
     os.mkdir(dir_name)
     zipObj = ZipFile(dir_name+'/bingoplader.zip', 'w')
-    st.info("Laver Bingoplader fra playlisten {}...".format(sp.playlist(playlist_link)['name']))
     for ix,plade_df in enumerate(bingoplade_dfs):
         for col in plade_df.columns:
             plade_df[plade_df[col][0]] = plade_df[col]
@@ -133,7 +128,7 @@ if st.session_state['lav_bingo']:
         section.page_width = new_width
         section.page_height = new_height
 
-        #document.add_heading('MUSIKBINGO')
+
 
         t = document.add_table(plade_df.shape[0]+1, plade_df.shape[1])
 
@@ -150,8 +145,65 @@ if st.session_state['lav_bingo']:
         zipObj.write(dir_name+'/bingoplade_{}.docx'.format(ix+1))
         
     zipObj.close()
-    st.info("Sender bingoplader til "+email_address)
-    send_mail('aske.osv@gmail.com',[email_address],'Musikbingo','Go Quiz!',[dir_name+'/bingoplader.zip'])
-    shutil.rmtree(dir_name)
-    st.session_state['lav_bingo'] = False
-    st.balloons()
+
+    return dir_name
+
+
+def main():
+    st.header('Musikbingo')
+
+
+    playlist_link = st.text_input('Spotify Playlist Link:')
+    email_address = st.text_input('Modtager Email:')
+    num_plader = st.slider("antal bingoplader")
+
+
+
+    sp = initialize_spotify()
+    
+    value_strings,ixes = get_tile_values_from_playlist(playlist_link,sp)
+
+
+    
+
+    # If this is the first run of the app, create 'lav_bingo' in the session_state dict
+    if 'lav_bingo' not in st.session_state:
+        st.session_state['lav_bingo'] = False
+
+    # Letting the app be activated by the session state rather than a button is much more stable
+    if st.button('Lav Bingoplader!'):
+        st.session_state['lav_bingo'] = True
+
+    # The main functionality is activated
+    if st.session_state['lav_bingo'] and playlist_link and email_address and num_plader:
+        
+
+        
+        bingoplade_dfs = create_bingo_dfs(value_strings,num_plader)
+        
+        st.info("Laver Bingoplader fra playlisten {}...".format(sp.playlist(playlist_link)['name']))
+        
+        dir_name = save_dfs_to_docx(bingoplade_dfs)
+
+        st.info("Sender bingoplader til "+email_address)
+        send_mail('aske.osv@gmail.com',[email_address],'Musikbingo','Go Quiz!',[dir_name+'/bingoplader.zip'])
+
+        # DELETING ALL FILES SAVED LOCALLY
+        shutil.rmtree(dir_name)
+
+        # RESETTING STATE ST APP DOESNT TRY TO RUN AGAIN WITH SAME VALUES
+        st.session_state['lav_bingo'] = False
+
+        # C3L38R4T3
+        st.balloons()
+
+    elif not st.session_state['lav_bingo']:
+        pass
+    elif not playlist_link:
+        st.info('Indtast et gyldigt spotify playliste-link')
+
+    elif not email_address:
+        st.info('Indtast en gyldig email addresse så du kan modtage bingopladerne')
+
+    elif not num_plader:
+        st.info('PVælg et antal bingoplader (større end nul, self)')
